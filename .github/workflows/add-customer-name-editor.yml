@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Patch customer notes and contact editor
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
           p = Path('index.html')
@@ -40,7 +40,6 @@ function mountCustomerNotesEditorV2(page){
   function load(){const x=(db.sales||[]).find(v=>String(v.id)===String(sel.value));if(!x)return;name.value=(typeof saleName==='function'?saleName(x):(x.name||''));phone.value=x.phone||'';note.value=x.note||x.notes||x.ghiChu||'';}
   sel.onchange=load; load();
   box.querySelector('#v2Save').onclick=()=>{const x=(db.sales||[]).find(v=>String(v.id)===String(sel.value));if(!x)return;const oldPhone=String(x.phone||'').trim(),n=name.value.trim(),ph=phone.value.trim(),nt=note.value.trim();x.name=n;x.phone=ph;x.note=nt;if(oldPhone){(db.sales||[]).forEach(v=>{if(v!==x&&String(v.phone||'').trim()===oldPhone&&n)v.name=n;});}save();alert('Đã lưu chỉnh sửa');};
-
   if(page==='customers'){
     const table=main.querySelector('table');
     if(table){
