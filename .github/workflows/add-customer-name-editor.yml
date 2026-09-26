@@ -1,0 +1,61 @@
+name: Add customer name editor
+on:
+  push:
+    paths:
+      - '.github/workflows/add-customer-name-editor.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add editor to customer and sales history pages
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          marker='/* CUSTOMER_NAME_EDITOR_V1 */'
+          if marker not in s:
+              code=r'''
+/* CUSTOMER_NAME_EDITOR_V1 */
+const _renderBeforeNameEditor = render;
+render = function(p){
+  _renderBeforeNameEditor(p);
+  if(p==='customers' || p==='salesh') mountCustomerNameEditor(p);
+};
+function mountCustomerNameEditor(page){
+  const main=document.querySelector('#main .page.active');
+  if(!main || document.querySelector('#oldNameEditor')) return;
+  const rows=[...db.sales].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  const box=document.createElement('div');
+  box.id='oldNameEditor'; box.className='card';
+  box.innerHTML='<h3 style="margin-top:0">Sửa / thêm tên khách cũ</h3><div class="form"><div><label>Chọn đơn cũ</label><select id="editSaleId"></select></div><div><label>Tên khách</label><input id="editCustomerName" placeholder="Nhập hoặc sửa tên khách"></div><div style="align-self:end"><button class="btn" id="saveCustomerName">Lưu tên</button></div></div><div class="muted" style="margin-top:8px">Có thể bổ sung tên cho đơn cũ chưa có tên hoặc sửa tên đã nhập nhầm. Nếu đơn có SĐT, tên mới sẽ được cập nhật cho các đơn cùng SĐT để mục Khách hàng hiển thị thống nhất.</div>';
+  const h=main.querySelector('h2');
+  if(h) h.insertAdjacentElement('afterend',box); else main.prepend(box);
+  const sel=box.querySelector('#editSaleId'), inp=box.querySelector('#editCustomerName');
+  sel.innerHTML=rows.map(x=>'<option value="'+esc(x.id)+'">'+esc((x.date||'')+' | '+(x.phone||'Không SĐT')+' | '+(saleName(x)||'Chưa có tên'))+'</option>').join('');
+  function load(){const x=db.sales.find(v=>String(v.id)===String(sel.value));inp.value=x?saleName(x):''}
+  sel.onchange=load; load();
+  box.querySelector('#saveCustomerName').onclick=()=>{
+    const x=db.sales.find(v=>String(v.id)===String(sel.value)); if(!x)return;
+    const n=inp.value.trim(); if(!n){alert('Bạn nhập tên khách trước nhé');return}
+    if(x.phone){db.sales.forEach(v=>{if(String(v.phone||'').trim()===String(x.phone).trim())v.name=n})}else{x.name=n}
+    save();
+    setTimeout(()=>{if(active==='customers'||active==='salesh')mountCustomerNameEditor(active)},0);
+  };
+}
+'''
+              pos=s.rfind('</script>')
+              if pos<0: raise SystemExit('script end not found')
+              s=s[:pos]+code+'\n'+s[pos:]
+              p.write_text(s,encoding='utf-8')
+      - name: Commit change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Add customer name editor to history and customers"
+          git push
