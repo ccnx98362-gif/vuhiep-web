@@ -1,4 +1,4 @@
-name: Add customer name editor
+name: Add customer notes editor
 on:
   push:
     paths:
@@ -10,40 +10,64 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add editor to customer and sales history pages
+      - name: Add editable customer notes and contact details
         shell: python
         run: |
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
-          marker='/* CUSTOMER_NAME_EDITOR_V1 */'
+          marker='/* CUSTOMER_DETAILS_EDITOR_V2 */'
           if marker not in s:
               code=r'''
-/* CUSTOMER_NAME_EDITOR_V1 */
-const _renderBeforeNameEditor = render;
+/* CUSTOMER_DETAILS_EDITOR_V2 */
+const _renderBeforeCustomerDetailsV2 = render;
 render = function(p){
-  _renderBeforeNameEditor(p);
-  if(p==='customers' || p==='salesh') mountCustomerNameEditor(p);
+  _renderBeforeCustomerDetailsV2(p);
+  if(p==='customers') enhanceCustomerNotesTable();
 };
-function mountCustomerNameEditor(page){
+function enhanceCustomerNotesTable(){
+  const main=document.querySelector('#main .page.active');
+  const table=main?.querySelector('table');
+  if(!table || table.dataset.notesV2==='1') return;
+  table.dataset.notesV2='1';
+  const hr=table.querySelector('thead tr');
+  if(hr){const th=document.createElement('th');th.textContent='Ghi chú';hr.appendChild(th)}
+  const groups={};
+  db.sales.forEach(s=>{
+    const k=String(s.phone||s.name||s.id||'');
+    groups[k]??=[]; groups[k].push(s);
+  });
+  const vals=Object.values(groups);
+  [...table.querySelectorAll('tbody tr')].forEach((tr,i)=>{
+    const g=vals[i]||[];
+    const latest=g.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))[0];
+    const td=document.createElement('td');
+    td.style.whiteSpace='normal'; td.style.minWidth='220px';
+    td.textContent=(latest&&latest.note)?latest.note:'-';
+    tr.appendChild(td);
+  });
+}
+mountCustomerNameEditor = function(page){
   const main=document.querySelector('#main .page.active');
   if(!main || document.querySelector('#oldNameEditor')) return;
   const rows=[...db.sales].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   const box=document.createElement('div');
   box.id='oldNameEditor'; box.className='card';
-  box.innerHTML='<h3 style="margin-top:0">Sửa / thêm tên khách cũ</h3><div class="form"><div><label>Chọn đơn cũ</label><select id="editSaleId"></select></div><div><label>Tên khách</label><input id="editCustomerName" placeholder="Nhập hoặc sửa tên khách"></div><div style="align-self:end"><button class="btn" id="saveCustomerName">Lưu tên</button></div></div><div class="muted" style="margin-top:8px">Có thể bổ sung tên cho đơn cũ chưa có tên hoặc sửa tên đã nhập nhầm. Nếu đơn có SĐT, tên mới sẽ được cập nhật cho các đơn cùng SĐT để mục Khách hàng hiển thị thống nhất.</div>';
+  box.innerHTML='<h3 style="margin-top:0">Sửa thông tin khách / ghi chú</h3><div class="form"><div><label>Chọn đơn cũ</label><select id="editSaleId"></select></div><div><label>Tên khách</label><input id="editCustomerName" placeholder="Nhập hoặc sửa tên khách"></div><div><label>Số điện thoại</label><input id="editCustomerPhone" placeholder="Nhập hoặc sửa SĐT"></div><div><label>Ghi chú</label><input id="editCustomerNote" placeholder="VD: 3 hôm nữa gọi lại"></div></div><br><button class="btn" id="saveCustomerDetails">Lưu thay đổi</button><div class="muted" style="margin-top:8px">Có thể sửa tên, SĐT và ghi chú của đơn cũ. Tên/SĐT được đồng bộ cho các đơn cùng khách khi có thể nhận diện bằng SĐT cũ.</div>';
   const h=main.querySelector('h2');
   if(h) h.insertAdjacentElement('afterend',box); else main.prepend(box);
-  const sel=box.querySelector('#editSaleId'), inp=box.querySelector('#editCustomerName');
+  const sel=box.querySelector('#editSaleId'), name=box.querySelector('#editCustomerName'), phone=box.querySelector('#editCustomerPhone'), note=box.querySelector('#editCustomerNote');
   sel.innerHTML=rows.map(x=>'<option value="'+esc(x.id)+'">'+esc((x.date||'')+' | '+(x.phone||'Không SĐT')+' | '+(saleName(x)||'Chưa có tên'))+'</option>').join('');
-  function load(){const x=db.sales.find(v=>String(v.id)===String(sel.value));inp.value=x?saleName(x):''}
+  function load(){const x=db.sales.find(v=>String(v.id)===String(sel.value));name.value=x?saleName(x):'';phone.value=x?String(x.phone||''):'';note.value=x?String(x.note||''):''}
   sel.onchange=load; load();
-  box.querySelector('#saveCustomerName').onclick=()=>{
+  box.querySelector('#saveCustomerDetails').onclick=()=>{
     const x=db.sales.find(v=>String(v.id)===String(sel.value)); if(!x)return;
-    const n=inp.value.trim(); if(!n){alert('Bạn nhập tên khách trước nhé');return}
-    if(x.phone){db.sales.forEach(v=>{if(String(v.phone||'').trim()===String(x.phone).trim())v.name=n})}else{x.name=n}
+    const n=name.value.trim(), ph=phone.value.trim(), nt=note.value.trim(), oldPhone=String(x.phone||'').trim();
+    if(!n && !ph){alert('Bạn nhập ít nhất tên hoặc SĐT nhé');return}
+    if(oldPhone){db.sales.forEach(v=>{if(String(v.phone||'').trim()===oldPhone){if(n)v.name=n;if(ph)v.phone=ph}})}
+    else {if(n)x.name=n;if(ph)x.phone=ph}
+    x.note=nt;
     save();
-    setTimeout(()=>{if(active==='customers'||active==='salesh')mountCustomerNameEditor(active)},0);
   };
 }
 '''
@@ -57,5 +81,5 @@ function mountCustomerNameEditor(page){
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Add customer name editor to history and customers"
+          git commit -m "Show and edit customer notes"
           git push
