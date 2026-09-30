@@ -1,0 +1,48 @@
+name: Add safe lens category delete
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-delete-lens-category.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add delete button without touching history
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          old_cats = '''function cats(){return'<h2>Danh mục tròng</h2><div class="card"><div class="form"><input id="cname" placeholder="Tên loại tròng"><input id="cindex" placeholder="Chiết suất"><select id="cadd"><option value="0">Không ADD</option><option value="1">Có ADD</option></select><button class="btn" id="addCat">Thêm danh mục</button></div></div><div class="card">'+tbl(['Loại tròng','Chiết suất','ADD','Trạng thái',''],db.cats.map(c=>[c.name,c.index,c.add?'Có':'Không',c.active?'Đang dùng':'Ngừng dùng','<button class="btn small toggleCat" data-id="'+c.id+'">'+(c.active?'Ngừng dùng':'Khôi phục')+'</button>']))+'</div>'}'''
+          new_cats = '''function cats(){return'<h2>Danh mục tròng</h2><div class="card"><div class="form"><input id="cname" placeholder="Tên loại tròng"><input id="cindex" placeholder="Chiết suất"><select id="cadd"><option value="0">Không ADD</option><option value="1">Có ADD</option></select><button class="btn" id="addCat">Thêm danh mục</button></div></div><div class="card">'+tbl(['Loại tròng','Chiết suất','ADD','Trạng thái','Thao tác'],db.cats.map(c=>[c.name,c.index,c.add?'Có':'Không',c.active?'Đang dùng':'Ngừng dùng','<button class="btn small toggleCat" data-id="'+c.id+'">'+(c.active?'Ngừng dùng':'Khôi phục')+'</button> <button class="btn small danger deleteCat" data-id="'+c.id+'">Xóa</button>']))+'</div>'}'''
+          if old_cats not in s:
+              raise SystemExit('Không tìm thấy đúng phần Danh mục tròng; dừng để tránh sửa nhầm.')
+          s = s.replace(old_cats, new_cats, 1)
+
+          old_bind = '''document.querySelectorAll('.toggleCat').forEach(b=>b.onclick=()=>{let c=db.cats.find(x=>x.id===b.dataset.id);c.active=!c.active;save()})'''
+          new_bind = '''document.querySelectorAll('.toggleCat').forEach(b=>b.onclick=()=>{let c=db.cats.find(x=>x.id===b.dataset.id);c.active=!c.active;save()});document.querySelectorAll('.deleteCat').forEach(b=>b.onclick=()=>{let c=db.cats.find(x=>x.id===b.dataset.id);if(!c)return;if(!confirm('Xóa danh mục "'+c.name+' '+c.index+'"?\\n\\nLịch sử nhập, lịch sử bán và số liệu cũ vẫn được giữ nguyên.'))return;db.cats=db.cats.filter(x=>x.id!==c.id);save()})'''
+          if old_bind not in s:
+              raise SystemExit('Không tìm thấy đúng xử lý Danh mục tròng; dừng để tránh sửa nhầm.')
+          s = s.replace(old_bind, new_bind, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Verify patch
+        run: |
+          grep -q 'class="btn small danger deleteCat"' index.html
+          grep -q "querySelectorAll('.deleteCat')" index.html
+      - name: Commit change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Add safe delete for lens categories"
+          git push
