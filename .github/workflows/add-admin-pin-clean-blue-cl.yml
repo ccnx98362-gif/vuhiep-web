@@ -1,0 +1,81 @@
+name: Add admin PIN and clean mistaken BLUE CL lens
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-admin-pin-clean-blue-cl.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index safely
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+
+          # 1) Add Settings/PIN page to navigation.
+          old="['other','Đồng hồ / phụ kiện'],['report','Báo cáo']]"
+          new="['other','Đồng hồ / phụ kiện'],['report','Báo cáo'],['settings','Cài đặt / PIN']]"
+          if old not in s:
+              raise SystemExit('Không tìm thấy danh sách menu chuẩn; dừng để tránh sửa nhầm.')
+          s=s.replace(old,new,1)
+
+          # 2) Add settings renderer.
+          old="if(p==='report')h=report();document.querySelector('#main').innerHTML"
+          new="if(p==='report')h=report();if(p==='settings')h=settings();document.querySelector('#main').innerHTML"
+          if old not in s:
+              raise SystemExit('Không tìm thấy render chuẩn; dừng để tránh sửa nhầm.')
+          s=s.replace(old,new,1)
+
+          # 3) Add PIN helpers and settings page before table helper.
+          marker="function tbl(head,rows){"
+          insert="""function adminPin(){return localStorage.getItem('vuhiep_admin_pin')||''}function requireAdminPin(){let current=adminPin();if(!current){alert('Bạn chưa cài mã PIN quản trị. Vào Cài đặt / PIN để tạo PIN trước.');return false}let entered=prompt('Nhập mã PIN quản trị để tiếp tục:');if(entered===null)return false;if(entered!==current){alert('Mã PIN không đúng.');return false}return true}function settings(){return'<h2>Cài đặt / PIN quản trị</h2><div class=\"card\"><p class=\"muted\">PIN dùng để bảo vệ các thao tác xóa dữ liệu. PIN được cài riêng trên trình duyệt này.</p><div class=\"form\"><div><label>PIN hiện tại</label><input id=\"oldPin\" type=\"password\" inputmode=\"numeric\" placeholder=\"Nếu đã có PIN\"></div><div><label>PIN mới</label><input id=\"newPin\" type=\"password\" inputmode=\"numeric\" placeholder=\"Tối thiểu 4 số\"></div><div><label>Nhập lại PIN mới</label><input id=\"newPin2\" type=\"password\" inputmode=\"numeric\" placeholder=\"Nhập lại PIN\"></div><div style=\"align-self:end\"><button class=\"btn\" id=\"savePin\">Lưu / đổi PIN</button></div></div></div>'}
+"""
+          if marker not in s:
+              raise SystemExit('Không tìm thấy vị trí helper; dừng.')
+          s=s.replace(marker,insert+marker,1)
+
+          # 4) Protect category deletion with PIN.
+          old="if(!c)return;if(!confirm('Xóa danh mục"
+          new="if(!c)return;if(!requireAdminPin())return;if(!confirm('Xóa danh mục"
+          if old not in s:
+              raise SystemExit('Không tìm thấy xử lý xóa danh mục; dừng.')
+          s=s.replace(old,new,1)
+
+          # 5) Bind PIN settings.
+          old="if(p==='stock')document.querySelectorAll('.adjustStock')"
+          new="if(p==='settings'){let b=document.querySelector('#savePin');if(b)b.onclick=()=>{let old=oldPin.value.trim(),n=newPin.value.trim(),n2=newPin2.value.trim(),cur=adminPin();if(cur&&old!==cur)return alert('PIN hiện tại không đúng.');if(!/^\\d{4,}$/.test(n))return alert('PIN mới phải có ít nhất 4 chữ số.');if(n!==n2)return alert('Hai lần nhập PIN mới chưa giống nhau.');localStorage.setItem('vuhiep_admin_pin',n);oldPin.value=newPin.value=newPin2.value='';alert('Đã lưu PIN quản trị.')}}if(p==='stock')document.querySelectorAll('.adjustStock')"
+          if old not in s:
+              raise SystemExit('Không tìm thấy bind stock; dừng.')
+          s=s.replace(old,new,1)
+
+          # 6) One-time cleanup of mistaken BLUE CL inventory/category (do not touch sales/history sales).
+          old="function normalize(){db.cats??=[];db.imports??=[];db.sales??=[];db.frames??=[];db.other??=[];db.contacts??=[];db.adjustments??=[]}"
+          new="function normalize(){db.cats??=[];db.imports??=[];db.sales??=[];db.frames??=[];db.other??=[];db.contacts??=[];db.adjustments??=[];if(!db._blueClCleaned){let bad=x=>String(x?.cat||x?.name||'').trim().toUpperCase()==='BLUE CL';db.cats=db.cats.filter(c=>!bad(c));db.imports=db.imports.filter(x=>!bad(x));db.adjustments=db.adjustments.filter(x=>!bad(x));db._blueClCleaned=true}}"
+          if old not in s:
+              raise SystemExit('Không tìm thấy normalize chuẩn; dừng.')
+          s=s.replace(old,new,1)
+
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Verify patch
+        run: |
+          grep -q "Cài đặt / PIN" index.html
+          grep -q "requireAdminPin" index.html
+          grep -q "_blueClCleaned" index.html
+          grep -q "savePin" index.html
+      - name: Commit index
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Add admin PIN protection and remove mistaken BLUE CL inventory"
+          git push
