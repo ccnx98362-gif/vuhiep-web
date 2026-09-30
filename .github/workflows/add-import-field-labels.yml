@@ -1,0 +1,35 @@
+name: Add clear import field labels
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-import-field-labels.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add labels to import form
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          old = '''function imp(){let cs=catsActive();return'<h2>Nhập tròng kính</h2><div class="card"><div class="form"><input id="idate" type="date" value="'+today()+'"><select id="icat">'+cs.map(c=>'<option>'+esc(c.name)+'</option>').join('')+'</select><select id="iindex"></select><select id="isph">'+opt(sph,'0.00')+'</select><select id="icyl">'+opt(cyl,'0.00')+'</select><div class="iaddf"><select id="iadd">'+opt(adds)+'</select></div><input id="iqty" type="number" min="1" value="2"><input id="icost" type="number" value="0" placeholder="Giá nhập"><input id="isupplier" placeholder="Nhà cung cấp"><input id="inote" placeholder="Ghi chú"></div><br><button class="btn" id="saveImp">Lưu lần nhập</button></div>'}'''
+          new = '''function imp(){let cs=catsActive();return'<h2>Nhập tròng kính</h2><div class="card"><div class="form"><div><label>Ngày nhập</label><input id="idate" type="date" value="'+today()+'"></div><div><label>Loại tròng</label><select id="icat">'+cs.map(c=>'<option>'+esc(c.name)+'</option>').join('')+'</select></div><div><label>Chiết suất</label><select id="iindex"></select></div><div><label>Số độ (SPH)</label><select id="isph">'+opt(sph,'0.00')+'</select></div><div><label>Độ loạn (CYL)</label><select id="icyl">'+opt(cyl,'0.00')+'</select></div><div class="iaddf"><label>Độ ADD</label><select id="iadd">'+opt(adds)+'</select></div><div><label>Số lượng</label><input id="iqty" type="number" min="1" value="2"></div><div><label>Giá nhập / tròng</label><input id="icost" type="number" value="0" placeholder="Giá nhập"></div><div><label>Nhà cung cấp</label><input id="isupplier" placeholder="Nhà cung cấp"></div><div><label>Ghi chú</label><input id="inote" placeholder="Ghi chú"></div></div><br><button class="btn" id="saveImp">Lưu lần nhập</button></div>'}'''
+          if old not in s:
+              raise SystemExit('Không tìm thấy đúng form Nhập hàng để sửa; dừng để tránh sửa nhầm.')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Label import form fields clearly"
+          git push
