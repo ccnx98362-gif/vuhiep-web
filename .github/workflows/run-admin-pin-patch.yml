@@ -1,8 +1,9 @@
-name: Run admin PIN patch
+name: Run settings patch
 on:
   push:
     paths:
       - patch_admin_pin.py
+      - .github/workflows/run-admin-pin-patch.yml
 permissions:
   contents: write
 jobs:
@@ -15,5 +16,5 @@ jobs:
           git config user.name github-actions-bot
           git config user.email github-actions-bot@users.noreply.github.com
           git add index.html
-          git commit -m "Add admin PIN and clean BLUE CL" || exit 0
+          git commit -m "Update protected settings and clean mistaken lens" || exit 0
           git push
