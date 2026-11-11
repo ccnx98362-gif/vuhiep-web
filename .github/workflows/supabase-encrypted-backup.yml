@@ -1,0 +1,30 @@
+name: Supabase encrypted backup
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '33 18 * * *'
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read and encrypt store snapshot
+        run: node scripts/monitor-supabase.mjs
+        env:
+          VH_BACKUP: '1'
+          VH_BACKUP_EMAIL: ${{ secrets.VH_BACKUP_EMAIL }}
+          VH_BACKUP_PASSWORD: ${{ secrets.VH_BACKUP_PASSWORD }}
+          VH_BACKUP_PASSPHRASE: ${{ secrets.VH_BACKUP_PASSPHRASE }}
+      - name: Archive ciphertext only
+        uses: actions/upload-artifact@v4
+        with:
+          name: vuhiep-encrypted-backup
+          path: encrypted-backups/*.enc.json
+          if-no-files-found: error
+          retention-days: 30
