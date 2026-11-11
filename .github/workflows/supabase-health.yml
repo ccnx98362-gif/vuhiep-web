@@ -1,0 +1,21 @@
+name: Supabase health (authenticated read-only)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 0,6,12,18 * * *'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check database availability without modifying data
+        run: node scripts/monitor-supabase.mjs
+        env:
+          VH_BACKUP_EMAIL: ${{ secrets.VH_BACKUP_EMAIL }}
+          VH_BACKUP_PASSWORD: ${{ secrets.VH_BACKUP_PASSWORD }}

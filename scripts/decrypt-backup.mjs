@@ -1,0 +1,14 @@
+import fs from "node:fs/promises";
+import crypto from "node:crypto";
+const [src,dest]=process.argv.slice(2), pass=process.env.VH_BACKUP_PASSPHRASE;
+if (!src||!dest||!pass) throw new Error("Usage: VH_BACKUP_PASSPHRASE=... node scripts/decrypt-backup.mjs backup.enc.json restored.json");
+const x=JSON.parse(await fs.readFile(src,"utf8"));
+if(x.format!=="VH-AES256-GCM-1") throw new Error("Invalid backup format");
+const key=crypto.scryptSync(pass,Buffer.from(x.salt,"base64"),32,{N:32768,r:8,p:1,maxmem:67108864});
+const decipher=crypto.createDecipheriv("aes-256-gcm",key,Buffer.from(x.iv,"base64"));
+decipher.setAuthTag(Buffer.from(x.tag,"base64"));
+const plain=Buffer.concat([decipher.update(Buffer.from(x.ciphertext,"base64")),decipher.final()]);
+const data=JSON.parse(plain.toString("utf8"));
+if(!data.record?.data) throw new Error("Invalid backup");
+await fs.writeFile(dest,JSON.stringify(data,null,2),{flag:"wx",mode:0o600});
+console.log("Decrypted locally to "+dest);
