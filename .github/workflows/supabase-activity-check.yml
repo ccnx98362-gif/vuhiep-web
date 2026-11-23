@@ -1,0 +1,22 @@
+name: Vũ Hiệp - Supabase read-only activity check
+
+on:
+  schedule:
+    # Asia/Bangkok 07:17, 13:17, 19:17 and 01:17.
+    - cron: '17 0,6,12,18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read-only database activity check
+        run: node scripts/supabase-health-ping.mjs
